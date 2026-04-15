@@ -1,0 +1,39 @@
+{% extends "core/base.html" %}
+
+{% block title %}Login | AICS Report Hub{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-5">
+        <section class="glass-card p-4 p-lg-5">
+            <p class="section-label mb-2">Secure Access</p>
+            <h1 class="mb-3">Sign in to your account</h1>
+            <p class="text-secondary mb-4">
+                Students, supervisors, admins, and superadmin all sign in here using their normal site credentials.
+            </p>
+
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <form method="post" novalidate>
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="{{ form.username.id_for_label }}" class="form-label">Username</label>
+                    {{ form.username }}
+                    <div class="text-danger small mt-1">{{ form.username.errors }}</div>
+                </div>
+                <div class="mb-4">
+                    <label for="{{ form.password.id_for_label }}" class="form-label">Password</label>
+                    {{ form.password }}
+                    <div class="text-danger small mt-1">{{ form.password.errors }}</div>
+                </div>
+                {% if next %}
+                    <input type="hidden" name="next" value="{{ next }}">
+                {% endif %}
+                <button type="submit" class="btn btn-primary btn-lg rounded-pill w-100">Login</button>
+            </form>
+        </section>
+    </div>
+</div>
+{% endblock %}

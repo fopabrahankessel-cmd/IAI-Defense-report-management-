@@ -5,6 +5,8 @@ name = "pypi"
 
 [packages]
 django = "*"
+psycopg = {extras = ["binary"], version = "*"}
+pymupdf = "*"
 
 [dev-packages]
 

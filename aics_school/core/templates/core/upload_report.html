@@ -1,0 +1,143 @@
+{% extends "core/base.html" %}
+
+{% block title %}Upload Final Report | AICS Report Hub{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-xl-8">
+        <section class="glass-card p-4 p-lg-5">
+            <p class="section-label mb-2">Student Submission</p>
+            <h1 class="mb-3">Upload your final report</h1>
+            <p class="text-secondary">
+                Campus and academic context are pulled automatically from your student profile.
+                Enter the upload code from your supervisor and wait for the live verification before submitting.
+            </p>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="glass-card p-3 h-100">
+                        <div class="small text-secondary">Campus</div>
+                        <div class="fw-semibold">{{ student.center.name }}</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="glass-card p-3 h-100">
+                        <div class="small text-secondary">Level</div>
+                        <div class="fw-semibold">{{ student.get_level_display }}</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="glass-card p-3 h-100">
+                        <div class="small text-secondary">Specialization</div>
+                        <div class="fw-semibold">{{ student.get_specialization_display }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <form method="post" enctype="multipart/form-data" id="report-upload-form" novalidate>
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                {% endif %}
+
+                <div class="mb-3">
+                    <label for="{{ form.theme.id_for_label }}" class="form-label">Theme</label>
+                    {{ form.theme }}
+                    <div class="text-danger small mt-1">{{ form.theme.errors }}</div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="{{ form.description.id_for_label }}" class="form-label">Description</label>
+                    {{ form.description }}
+                    <div class="text-danger small mt-1">{{ form.description.errors }}</div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="{{ form.pdf_file.id_for_label }}" class="form-label">Select File</label>
+                    {{ form.pdf_file }}
+                    <div class="text-danger small mt-1">{{ form.pdf_file.errors }}</div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="{{ form.upload_code.id_for_label }}" class="form-label">Upload Code</label>
+                    <div class="input-group">
+                        {{ form.upload_code }}
+                        <span class="input-group-text bg-white">
+                            <span id="code-spinner" class="spinner-border spinner-border-sm text-primary d-none" aria-hidden="true"></span>
+                            <i id="code-status-icon" class="bi bi-shield-lock"></i>
+                        </span>
+                    </div>
+                    <div id="code-status-text" class="small text-secondary mt-2">{{ form.upload_code.help_text }}</div>
+                    <div class="text-danger small mt-1">{{ form.upload_code.errors }}</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg rounded-pill px-4" id="submit-button" disabled>Upload Report</button>
+            </form>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const codeInput = document.getElementById("id_upload_code");
+    const spinner = document.getElementById("code-spinner");
+    const icon = document.getElementById("code-status-icon");
+    const text = document.getElementById("code-status-text");
+    const submitButton = document.getElementById("submit-button");
+    let verifyTimeout = null;
+
+    function setState({ loading = false, valid = null, message = "Enter the 8-character upload code provided by your supervisor." }) {
+        spinner.classList.toggle("d-none", !loading);
+        icon.className = "bi";
+
+        if (loading) {
+            icon.classList.add("bi-hourglass-split", "text-secondary");
+        } else if (valid === true) {
+            icon.classList.add("bi-check-circle-fill", "text-success");
+        } else if (valid === false) {
+            icon.classList.add("bi-x-circle-fill", "text-danger");
+        } else {
+            icon.classList.add("bi-shield-lock", "text-secondary");
+        }
+
+        text.textContent = message;
+        text.className = valid === true ? "small text-success mt-2" : valid === false ? "small text-danger mt-2" : "small text-secondary mt-2";
+        submitButton.disabled = valid !== true;
+    }
+
+    function verifyCode() {
+        const code = codeInput.value.trim();
+        if (!code) {
+            setState({ valid: null });
+            return;
+        }
+
+        setState({ loading: true, message: "Verifying upload code..." });
+
+        fetch(`{% url 'verify_upload_code' %}?code=${encodeURIComponent(code)}`, {
+            headers: { "X-Requested-With": "XMLHttpRequest" }
+        })
+            .then((response) => response.json())
+            .then((data) => {
+                setState({ valid: data.valid, message: data.message });
+            })
+            .catch(() => {
+                setState({ valid: false, message: "Could not verify the code right now." });
+            });
+    }
+
+    codeInput.addEventListener("input", () => {
+        clearTimeout(verifyTimeout);
+        setState({ loading: true, message: "Waiting for input to settle..." });
+        verifyTimeout = window.setTimeout(verifyCode, 350);
+    });
+
+    codeInput.addEventListener("blur", verifyCode);
+
+    {% if form.is_bound and not form.upload_code.errors %}
+        verifyCode();
+    {% endif %}
+</script>
+{% endblock %}

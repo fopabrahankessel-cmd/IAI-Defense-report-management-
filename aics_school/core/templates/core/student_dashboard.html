@@ -1,0 +1,71 @@
+{% extends "core/base.html" %}
+
+{% block title %}Student Dashboard | AICS Report Hub{% endblock %}
+
+{% block content %}
+<section class="glass-card p-4 p-lg-5 mb-4">
+    <p class="section-label mb-2">Student Dashboard</p>
+    <h1 class="mb-2">Welcome, {{ student.first_name|default:request.user.first_name }}</h1>
+    <p class="text-secondary mb-0">
+        Your campus, level, specialization, and final report progress are tracked here.
+    </p>
+</section>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <section class="glass-card p-4 h-100">
+            <h2 class="h4 mb-3">Profile</h2>
+            <ul class="list-unstyled text-secondary mb-0">
+                <li class="mb-2"><strong>Name:</strong> {{ student.first_name }} {{ student.last_name }}</li>
+                <li class="mb-2"><strong>Matricule:</strong> {{ student.matricule }}</li>
+                <li class="mb-2"><strong>Email:</strong> {{ student.user.email }}</li>
+                <li class="mb-2"><strong>Campus:</strong> {{ student.center.name }}</li>
+                <li class="mb-2"><strong>Level:</strong> {{ student.get_level_display }}</li>
+                <li class="mb-2"><strong>Specialization:</strong> {{ student.get_specialization_display }}</li>
+                <li class="mb-2"><strong>Supervisor:</strong> {{ student.assigned_supervisor.user.get_full_name|default:"Not assigned yet" }}</li>
+            </ul>
+        </section>
+    </div>
+    <div class="col-lg-8">
+        <section class="glass-card p-4 h-100">
+            {% if report %}
+                <p class="section-label mb-2">Final Report Submitted</p>
+                <h2 class="h3">{{ report.theme }}</h2>
+                <p class="text-secondary">{{ report.description }}</p>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="glass-card p-3 h-100">
+                            <div class="small text-secondary">Academic year</div>
+                            <div class="fw-semibold">{{ report.academic_year }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="glass-card p-3 h-100">
+                            <div class="small text-secondary">Status</div>
+                            <div class="fw-semibold">{{ report.get_status_display }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="glass-card p-3 h-100">
+                            <div class="small text-secondary">Grade</div>
+                            <div class="fw-semibold">{% if report.grade is not None %}{{ report.grade }}/20{% else %}Pending{% endif %}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="glass-card p-3 mb-4" style="background: rgba(238, 155, 0, 0.1);">
+                    <h3 class="h5">Supervisor Feedback</h3>
+                    <p class="mb-0 text-secondary">{{ report.supervisor_feedback|default:"No feedback added yet." }}</p>
+                </div>
+                <a href="{% url 'report_detail' report.pk %}" class="btn btn-primary rounded-pill px-4">Open Report</a>
+            {% else %}
+                <p class="section-label mb-2">Final Report Pending</p>
+                <h2 class="h3">You have not uploaded your report yet</h2>
+                <p class="text-secondary">
+                    Ask your assigned supervisor for a one-time upload code, then submit your final PDF through the student upload form.
+                </p>
+                <a href="{% url 'upload_report' %}" class="btn btn-primary rounded-pill px-4">Go To Upload Form</a>
+            {% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %}

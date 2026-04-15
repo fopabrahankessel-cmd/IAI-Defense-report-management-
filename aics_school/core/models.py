@@ -1,13 +1,13 @@
-from django.db import models
-from django.contrib.auth.models import AbstractUser
-from django.core.exceptions import ValidationError
-from django.core.files.base import ContentFile
+import os
 import random
 import string
-import os
-import io
 
-# Optional: Try to import fitz for PDF-to-Image preview
+from django.contrib.auth.models import AbstractUser
+from django.core.files.base import ContentFile
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import models
+
 try:
     import fitz  # PyMuPDF
 except ImportError:
@@ -43,6 +43,18 @@ class CustomUser(AbstractUser):
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.STUDENT)
     center = models.ForeignKey(AicsCenter, on_delete=models.SET_NULL, null=True, blank=True, help_text="Required for center-specific admins.")
 
+    @property
+    def is_campus_admin(self):
+        return self.role == self.Role.ADMIN and not self.is_superuser
+
+    @property
+    def is_supervisor(self):
+        return self.role == self.Role.SUPERVISOR
+
+    @property
+    def is_student(self):
+        return self.role == self.Role.STUDENT
+
     def __str__(self):
         center_info = f" - {self.center.name}" if self.center else ""
         return f"{self.username} ({self.get_role_display()}){center_info}"
@@ -50,6 +62,19 @@ class CustomUser(AbstractUser):
 class SupervisorProfile(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='supervisor_profile')
     center = models.ForeignKey(AicsCenter, on_delete=models.CASCADE)
+
+    def clean(self):
+        if self.user.role != CustomUser.Role.SUPERVISOR:
+            raise ValidationError("Supervisor profile can only be attached to a supervisor user.")
+        if self.user.center and self.user.center != self.center:
+            raise ValidationError("Supervisor user campus must match the supervisor profile campus.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        if self.user.center_id != self.center_id:
+            self.user.center = self.center
+            self.user.save(update_fields=['center'])
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Supervisor: {self.user.get_full_name() or self.user.username} ({self.center.name})"
@@ -71,12 +96,20 @@ class StudentProfile(models.Model):
     )
 
     def clean(self):
-        # If student is assigned to a supervisor, ensure they are in the same center
+        if self.user.role != CustomUser.Role.STUDENT:
+            raise ValidationError("Student profile can only be attached to a student user.")
+
+        if self.user.center and self.user.center != self.center:
+            raise ValidationError("Student user campus must match the student profile campus.")
+
         if self.assigned_supervisor and self.assigned_supervisor.center != self.center:
             raise ValidationError("Assigned supervisor must be in the same center as the student.")
 
     def save(self, *args, **kwargs):
         self.full_clean()
+        if self.user.center_id != self.center_id:
+            self.user.center = self.center
+            self.user.save(update_fields=['center'])
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -92,14 +125,16 @@ class OneTimeCode(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def clean(self):
-        # Enforce that only assigned supervisor can generate code
         if self.student.assigned_supervisor != self.supervisor:
             raise ValidationError("You can only generate codes for students assigned to you.")
 
+        if self.student.center_id != self.supervisor.center_id:
+            raise ValidationError("Student and supervisor must belong to the same campus.")
+
     def save(self, *args, **kwargs):
-        self.full_clean()
         if not self.code:
             self.code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -128,39 +163,63 @@ class Report(models.Model):
     upload_date = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.SUBMITTED)
     tags = models.CharField(max_length=255, help_text="Comma-separated keywords", blank=True)
+    grade = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(0), MaxValueValidator(20)],
+        help_text="Grade over 20."
+    )
+    supervisor_feedback = models.TextField(blank=True)
+    graded_at = models.DateTimeField(blank=True, null=True)
+
+    @property
+    def academic_year(self):
+        return f"{self.promotion_year - 1}/{self.promotion_year}"
+
+    @property
+    def can_be_graded(self):
+        return self.student.assigned_supervisor_id is not None
+
+    def _generate_preview_image(self):
+        if not self.pdf_file or fitz is None:
+            return False
+
+        self.pdf_file.open('rb')
+        try:
+            pdf_bytes = self.pdf_file.read()
+            if not pdf_bytes:
+                return False
+
+            document = fitz.open(stream=pdf_bytes, filetype="pdf")
+            try:
+                if len(document) == 0:
+                    return False
+                page = document.load_page(0)
+                pixmap = page.get_pixmap()
+                image_data = pixmap.tobytes("png")
+            finally:
+                document.close()
+        finally:
+            self.pdf_file.close()
+
+        preview_name = f"preview_{os.path.basename(self.pdf_file.name)}.png"
+        self.preview_image.save(preview_name, ContentFile(image_data), save=False)
+        return True
 
     def save(self, *args, **kwargs):
-        is_new_pdf = False
-        if not self.pk:
-            is_new_pdf = True
-        else:
-            old_instance = Report.objects.get(pk=self.pk)
-            if old_instance.pdf_file != self.pdf_file:
-                is_new_pdf = True
+        pdf_changed = self._state.adding
+        if not pdf_changed and self.pk:
+            previous_pdf = Report.objects.filter(pk=self.pk).values_list('pdf_file', flat=True).first()
+            pdf_changed = previous_pdf != self.pdf_file.name
 
         super().save(*args, **kwargs)
 
-        if is_new_pdf and self.pdf_file and fitz:
-            try:
-                # Open the PDF from the file field
-                pdf_bytes = self.pdf_file.read()
-                doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-                
-                if len(doc) > 0:
-                    page = doc.load_page(0)  # load the first page
-                    pix = page.get_pixmap()
-                    img_data = pix.tobytes("png")
-                    
-                    # Save the image back to the preview_image field
-                    preview_name = f"preview_{os.path.basename(self.pdf_file.name)}.png"
-                    self.preview_image.save(preview_name, ContentFile(img_data), save=False)
-                    
-                    # Update without triggering save() again to avoid recursion
-                    Report.objects.filter(pk=self.pk).update(preview_image=self.preview_image.name)
-                doc.close()
-            except Exception as e:
-                # Log or handle preview generation failure silently
-                print(f"Failed to generate preview: {e}")
+        if pdf_changed:
+            generated = self._generate_preview_image()
+            if generated:
+                Report.objects.filter(pk=self.pk).update(preview_image=self.preview_image.name)
 
     def __str__(self):
         return f"{self.theme} ({self.student.matricule}) - {self.get_status_display()}"

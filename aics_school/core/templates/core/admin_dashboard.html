@@ -1,0 +1,200 @@
+{% extends "core/base.html" %}
+
+{% block title %}Admin Dashboard | AICS Report Hub{% endblock %}
+
+{% block content %}
+<section class="glass-card p-4 p-lg-5 mb-4">
+    <div class="row align-items-center g-3">
+        <div class="col-lg-8">
+            <p class="section-label mb-2">{% if is_superadmin %}Superadmin{% else %}Campus Admin{% endif %}</p>
+            <h1 class="mb-2">Manage students and supervisors</h1>
+            <p class="text-secondary mb-0">
+                {% if is_superadmin %}
+                    You can manage every campus, supervisor, student, and report from here.
+                {% else %}
+                    You are managing the {{ request.user.center.name }} campus.
+                {% endif %}
+            </p>
+        </div>
+        <div class="col-lg-4 text-lg-end">
+            <a href="{% url 'report_list' %}" class="btn btn-outline-dark rounded-pill px-4">Open Public Repository</a>
+        </div>
+    </div>
+</section>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-6">
+        <section class="glass-card p-4 h-100">
+            <h2 class="h4 mb-3">Register Student</h2>
+            <p class="text-secondary small">Students are created first without a supervisor. Use the assignment panel afterward to link them.</p>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_student">
+                {% for field in student_form %}
+                    <div class="mb-3">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.help_text %}
+                            <div class="form-text">{{ field.help_text }}</div>
+                        {% endif %}
+                        <div class="text-danger small mt-1">{{ field.errors }}</div>
+                    </div>
+                {% endfor %}
+                <button type="submit" class="btn btn-primary rounded-pill px-4">Create Student</button>
+            </form>
+        </section>
+    </div>
+    <div class="col-xl-6">
+        <section class="glass-card p-4 h-100">
+            <h2 class="h4 mb-3">Register Supervisor</h2>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_supervisor">
+                {% for field in supervisor_form %}
+                    <div class="mb-3">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                        {{ field }}
+                        <div class="text-danger small mt-1">{{ field.errors }}</div>
+                    </div>
+                {% endfor %}
+                <button type="submit" class="btn btn-primary rounded-pill px-4">Create Supervisor</button>
+            </form>
+        </section>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <section class="glass-card p-4">
+            <h2 class="h4 mb-3">Assign Students To Supervisor</h2>
+            <p class="text-secondary">Choose one supervisor, then select up to 15 students to assign in a single action.</p>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="assign_students">
+                <div class="row g-3">
+                    {% for field in assignment_form %}
+                        <div class="{% if field.name == 'students' %}col-12{% else %}col-lg-4{% endif %}">
+                            <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.help_text %}
+                                <div class="form-text">{{ field.help_text }}</div>
+                            {% endif %}
+                            <div class="text-danger small mt-1">{{ field.errors }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+                <button type="submit" class="btn btn-primary rounded-pill px-4 mt-3">Assign Selected Students</button>
+            </form>
+        </section>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-12">
+        <section class="glass-card p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h4 mb-0">Students</h2>
+                <span class="badge text-bg-dark rounded-pill">{{ students|length }}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Matricule</th>
+                            <th>Campus</th>
+                            <th>Level</th>
+                            <th>Specialization</th>
+                            <th>Supervisor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in students %}
+                            <tr>
+                                <td>{{ student.first_name }} {{ student.last_name }}<br><span class="text-secondary small">{{ student.user.email }}</span></td>
+                                <td>{{ student.matricule }}</td>
+                                <td>{{ student.center.name }}</td>
+                                <td>{{ student.get_level_display }}</td>
+                                <td>{{ student.get_specialization_display }}</td>
+                                <td>{% if student.assigned_supervisor %}{{ student.assigned_supervisor.user.get_full_name|default:student.assigned_supervisor.user.username }}{% else %}Not assigned{% endif %}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center text-secondary py-4">No students registered yet.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+    <div class="col-xl-6">
+        <section class="glass-card p-4 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h4 mb-0">Supervisors</h2>
+                <span class="badge text-bg-dark rounded-pill">{{ supervisors|length }}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Campus</th>
+                            <th>Load</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for supervisor in supervisors %}
+                            <tr>
+                                <td>{{ supervisor.user.get_full_name|default:supervisor.user.username }}</td>
+                                <td>{{ supervisor.user.email }}</td>
+                                <td>{{ supervisor.center.name }}</td>
+                                <td>{{ supervisor.supervised_students.count }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center text-secondary py-4">No supervisors registered yet.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+    <div class="col-xl-6">
+        <section class="glass-card p-4 h-100">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h4 mb-0">Uploaded Reports</h2>
+                <span class="badge text-bg-dark rounded-pill">{{ reports|length }}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Theme</th>
+                            <th>Student</th>
+                            <th>Status</th>
+                            <th>Grade</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for report in reports %}
+                            <tr>
+                                <td><a href="{% url 'report_detail' report.pk %}">{{ report.theme }}</a></td>
+                                <td>{{ report.student.matricule }}</td>
+                                <td>{{ report.get_status_display }}</td>
+                                <td>{% if report.grade is not None %}{{ report.grade }}/20{% else %}Pending{% endif %}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center text-secondary py-4">No reports uploaded yet.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}
