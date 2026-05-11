@@ -256,6 +256,28 @@ def admin_dashboard(request):
 
 
 @login_required
+def get_students_for_supervisor(request, supervisor_id):
+    _require_role(request.user, CustomUser.Role.ADMIN)
+
+    supervisor = get_object_or_404(SupervisorProfile, pk=supervisor_id)
+
+    # Check if the admin can access this supervisor
+    if not request.user.is_superuser and supervisor.center != request.user.center:
+        raise PermissionDenied
+
+    students = StudentProfile.objects.filter(center=supervisor.center).select_related('user', 'center', 'assigned_supervisor__user').order_by('matricule')
+
+    data = [
+        {
+            'id': student.pk,
+            'label': f"{student.matricule} - {student.first_name} {student.last_name} ({student.center.name})"
+        } for student in students
+    ]
+
+    return JsonResponse(data, safe=False)
+
+
+@login_required
 def supervisor_dashboard(request):
     _require_role(request.user, CustomUser.Role.SUPERVISOR)
 

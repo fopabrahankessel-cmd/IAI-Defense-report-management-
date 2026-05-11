@@ -6,6 +6,7 @@ from django.utils import timezone
 from .models import (
     AicsCenter,
     CustomUser,
+    Level,
     OneTimeCode,
     Report,
     StudentProfile,
@@ -24,7 +25,7 @@ class UserCreationBaseForm(forms.ModelForm):
 
     class Meta:
         model = CustomUser
-        fields = ['first_name', 'last_name', 'email', 'username']
+        fields = ['first_name', 'last_name', 'email', 'username', 'password1', 'password2']
         widgets = {
             'first_name': forms.TextInput(attrs={'class': 'form-control'}),
             'last_name': forms.TextInput(attrs={'class': 'form-control'}),
@@ -210,6 +211,8 @@ class ReportUploadForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.student_profile = student_profile
         self.otp_instance = None
+        if student_profile and student_profile.level == Level.LEVEL_1:
+            self.fields['upload_code'].required = False
 
     def clean_pdf_file(self):
         pdf_file = self.cleaned_data.get('pdf_file')
@@ -229,7 +232,20 @@ class ReportUploadForm(forms.ModelForm):
         if Report.objects.filter(student=self.student_profile).exists():
             raise forms.ValidationError("You have already uploaded your final report.")
 
-        if upload_code:
+        if self.student_profile.level != Level.LEVEL_1:
+            if not upload_code:
+                self.add_error('upload_code', "Upload code is required for your level.")
+            elif upload_code:
+                try:
+                    self.otp_instance = OneTimeCode.objects.get(
+                        student=self.student_profile,
+                        code=upload_code,
+                        is_used=False,
+                    )
+                except OneTimeCode.DoesNotExist:
+                    self.add_error('upload_code', "Invalid or already used upload code.")
+        elif upload_code:
+            # For L1, if code provided, still validate it
             try:
                 self.otp_instance = OneTimeCode.objects.get(
                     student=self.student_profile,

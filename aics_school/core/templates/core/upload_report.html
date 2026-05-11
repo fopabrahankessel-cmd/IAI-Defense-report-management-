@@ -10,7 +10,11 @@
             <h1 class="mb-3">Upload your final report</h1>
             <p class="text-secondary">
                 Campus and academic context are pulled automatically from your student profile.
-                Enter the upload code from your supervisor and wait for the live verification before submitting.
+                {% if student.level == 'L1' %}
+                    No upload code is required for Level 1 students.
+                {% else %}
+                    Enter the upload code from your supervisor and wait for the live verification before submitting.
+                {% endif %}
             </p>
 
             <div class="row g-3 mb-4">
@@ -81,6 +85,7 @@
 
 {% block extra_js %}
 <script>
+    const studentLevel = '{{ student.level }}';
     const codeInput = document.getElementById("id_upload_code");
     const spinner = document.getElementById("code-spinner");
     const icon = document.getElementById("code-status-icon");
@@ -128,16 +133,23 @@
             });
     }
 
-    codeInput.addEventListener("input", () => {
-        clearTimeout(verifyTimeout);
-        setState({ loading: true, message: "Waiting for input to settle..." });
-        verifyTimeout = window.setTimeout(verifyCode, 350);
-    });
+    if (studentLevel !== 'L1') {
+        codeInput.addEventListener("input", () => {
+            clearTimeout(verifyTimeout);
+            setState({ loading: true, message: "Waiting for input to settle..." });
+            verifyTimeout = window.setTimeout(verifyCode, 350);
+        });
 
-    codeInput.addEventListener("blur", verifyCode);
+        codeInput.addEventListener("blur", verifyCode);
+    }
 
-    {% if form.is_bound and not form.upload_code.errors %}
-        verifyCode();
-    {% endif %}
+    if (studentLevel === 'L1') {
+        setState({ valid: true, message: "No upload code required for Level 1." });
+        codeInput.disabled = true;
+    } else {
+        {% if form.is_bound and not form.upload_code.errors %}
+            verifyCode();
+        {% endif %}
+    }
 </script>
 {% endblock %}
