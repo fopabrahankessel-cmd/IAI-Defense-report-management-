@@ -53,6 +53,9 @@
             >
                 <i class="bi bi-sliders me-2"></i>Advanced Search & Filters
             </button>
+            <script>
+                document.querySelector('[data-bs-target="#advanced-search-panel"]').setAttribute('aria-expanded', '{{ advanced_filters_active|lower }}');
+            </script>
         </div>
 
         <div class="col-12">
@@ -160,7 +163,7 @@
                         <li><strong>Email:</strong> {{ report.student.user.email }}</li>
                         <li><strong>Grade:</strong> {% if report.grade is not None %}{{ report.grade }}/20{% else %}Pending{% endif %}</li>
                     </ul>
-                    <a href="{% url 'report_detail' report.pk %}" class="btn btn-outline-dark rounded-pill w-100">View Report</a>
+                     <a href="{% url 'report_detail' report.pk %}" class="btn btn-outline-dark rounded-pill w-100">View Report</a>
                 </div>
             </article>
         </div>

@@ -1,3 +1,4 @@
+import hashlib
 import os
 import random
 import string
@@ -186,27 +187,36 @@ class Report(models.Model):
         if not self.pdf_file or fitz is None:
             return False
 
-        self.pdf_file.open('rb')
         try:
+            self.pdf_file.open('rb')
             pdf_bytes = self.pdf_file.read()
             if not pdf_bytes:
                 return False
 
             document = fitz.open(stream=pdf_bytes, filetype="pdf")
-            try:
-                if len(document) == 0:
-                    return False
-                page = document.load_page(0)
-                pixmap = page.get_pixmap()
-                image_data = pixmap.tobytes("png")
-            finally:
-                document.close()
-        finally:
-            self.pdf_file.close()
+            if len(document) == 0:
+                return False
+            page = document.load_page(0)
+            pixmap = page.get_pixmap()
+            image_data = pixmap.tobytes("png")
+            document.close()
 
-        preview_name = f"preview_{os.path.basename(self.pdf_file.name)}.png"
-        self.preview_image.save(preview_name, ContentFile(image_data), save=False)
-        return True
+            if not image_data:
+                return False
+
+            # Use md5 hash of the pdf filename to create a short unique preview name
+            pdf_basename = os.path.basename(self.pdf_file.name)
+            hash_digest = hashlib.md5(pdf_basename.encode()).hexdigest()
+            preview_name = f"preview_{hash_digest}.png"
+            self.preview_image.save(preview_name, ContentFile(image_data), save=False)
+            return True
+        except Exception:
+            return False
+        finally:
+            try:
+                self.pdf_file.close()
+            except:
+                pass
 
     def save(self, *args, **kwargs):
         pdf_changed = self._state.adding

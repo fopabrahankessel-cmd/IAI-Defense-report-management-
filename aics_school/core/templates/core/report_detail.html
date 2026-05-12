@@ -1,123 +1,222 @@
-{% extends "core/base.html" %}
-
-{% block title %}{{ report.theme }} | AICS Report Hub{% endblock %}
-
-{% block extra_head %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+{% extends "core/base.html" %} {% block title %}{{ report.theme }} | AICS Report
+Hub{% endblock %} {% block extra_head %}
 <style>
-    #pdf-viewer-container {
-        width: 100%;
-        min-height: 80vh;
-        overflow: auto;
-        border-radius: 1.25rem;
-        background: #18303d;
-        padding: 1.5rem;
-    }
+  #pdf-viewer-container {
+    width: 100%;
+    min-height: 80vh;
+    overflow: auto;
+    border-radius: 1.25rem;
+    background: #18303d;
+    padding: 1.5rem;
+  }
 
-    #pdf-canvas {
-        display: block;
-        max-width: 100%;
-        margin: 0 auto;
-        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
-        background: #fff;
-    }
+  #pdf-canvas {
+    display: block;
+    max-width: 100%;
+    margin: 0 auto;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
+    background: #fff;
+  }
 </style>
-{% endblock %}
-
-{% block content %}
+{% endblock %} {% block content %}
 <div class="row g-4">
-    <div class="col-xl-4">
-        <section class="glass-card p-4 h-100">
-            <p class="section-label mb-2">{{ report.student.center.name }}</p>
-            <h1 class="h2 mb-3">{{ report.theme }}</h1>
-            <p class="text-secondary">{{ report.description }}</p>
-            <hr>
-            <ul class="list-unstyled text-secondary mb-4">
-                <li class="mb-2"><strong>Student:</strong> {{ report.student.first_name }} {{ report.student.last_name }}</li>
-                <li class="mb-2"><strong>Email:</strong> {{ report.student.user.email }}</li>
-                <li class="mb-2"><strong>Level:</strong> {{ report.student.get_level_display }}</li>
-                <li class="mb-2"><strong>Specialization:</strong> {{ report.student.get_specialization_display }}</li>
-                <li class="mb-2"><strong>Academic year:</strong> {{ report.academic_year }}</li>
-                <li class="mb-2"><strong>Supervisor:</strong> {{ report.student.assigned_supervisor.user.get_full_name|default:"Not assigned" }}</li>
-                <li class="mb-2"><strong>Grade:</strong> {% if report.grade is not None %}{{ report.grade }}/20{% else %}Pending{% endif %}</li>
-            </ul>
-            <div class="glass-card p-3 mb-4" style="background: rgba(0, 109, 119, 0.07);">
-                <h2 class="h5">Supervisor Feedback</h2>
-                <p class="mb-0 text-secondary">{{ report.supervisor_feedback|default:"No feedback added yet." }}</p>
-            </div>
-            <div class="d-flex gap-2">
-                <button id="prev-page" class="btn btn-outline-secondary rounded-pill">Previous</button>
-                <button id="next-page" class="btn btn-outline-secondary rounded-pill">Next</button>
-                <span class="align-self-center text-secondary small">Page <span id="page-num">1</span> / <span id="page-count">-</span></span>
-            </div>
-        </section>
-    </div>
-    <div class="col-xl-8">
-        <section id="pdf-viewer-container" class="glass-card">
-            <canvas id="pdf-canvas"></canvas>
-        </section>
-    </div>
+  <div class="col-xl-4">
+    <section class="glass-card p-4 h-100">
+      <p class="section-label mb-2">
+        {% if report.student and report.student.center %}
+        {{report.student.center.name }} {% else %}Unknown Campus{% endif %}
+      </p>
+      <h1 class="h2 mb-3">{{ report.theme }}</h1>
+      <p class="text-secondary">{{ report.description }}</p>
+      <hr />
+      <ul class="list-unstyled text-secondary mb-4">
+        <li class="mb-2">
+          <strong>Student:</strong>
+          {% if report.student %} {{ report.student.first_name }} 
+          {{ report.student.last_name }} {% else %} Unknown {% endif %}
+        </li>
+        <li class="mb-2">
+          <strong>Email:</strong>
+          {% if report.student.user.email %} {{ report.student.user.email }} 
+          {%else %} Unknown {% endif %}
+        </li>
+        <li class="mb-2">
+          <strong>Level:</strong>
+          {% if report.student %} {{ report.student.get_level_display }}
+           {% else%} Unknown {% endif %}
+        </li>
+        <li class="mb-2">
+          <strong>Specialization:</strong>
+          {% if report.student %} {{ report.student.get_specialization_display}}
+           {% else %} Unknown {% endif %}
+        </li>
+        <li class="mb-2">
+          <strong>Academic year:</strong> {{ report.academic_year }}
+        </li>
+      </ul>
+      <div
+        class="glass-card p-3 mb-4"
+        style="background: rgba(0, 109, 119, 0.07)"
+      >
+        <h2 class="h5">Supervisor Feedback</h2>
+        <p class="mb-0 text-secondary">
+          {{ report.supervisor_feedback|default:"No feedback added yet." }}
+        </p>
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        <button id="prev-page" class="btn btn-outline-secondary rounded-pill">
+          Previous
+        </button>
+        <button id="next-page" class="btn btn-outline-secondary rounded-pill">
+          Next
+        </button>
+        {% if user.is_authenticated %}
+         {% if user.is_superuser or user.is_campus_admin or user.supervisor_profile == report.student.assigned_supervisor %}
+        <a
+          href="{% url 'download_report_pdf' report.pk %}"
+          class="btn btn-primary rounded-pill"
+        >
+          Download PDF
+        </a>
+        {% endif %} 
+        {% endif %}
+        <span class="align-self-center text-secondary small"
+          >Page <span id="page-num">1</span> /
+          <span id="page-count">-</span></span
+        >
+      </div>
+    </section>
+  </div>
+  <div class="col-xl-8">
+    <section id="pdf-viewer-container" class="glass-card">
+      <canvas id="pdf-canvas"></canvas>
+    </section>
+  </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
+{% endblock %} {% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-    const url = "{% url 'stream_report_pdf' report.pk %}";
-    let pdfDoc = null;
-    let pageNum = 1;
-    let pageIsRendering = false;
-    let pendingPage = null;
+  // 1. Set up Worker immediately
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-    const scale = 1.2;
-    const canvas = document.getElementById("pdf-canvas");
-    const ctx = canvas.getContext("2d");
+  // 2. State Variables
+  const url =
+    "{% url 'stream_report_pdf' report.pk %}?t=" + new Date().getTime();
+  let pdfDoc = null;
+  let pageNum = 1;
+  let pageIsRendering = false;
+  let pendingPage = null;
+  const scale = 1.5; // Increased scale for better clarity
 
-    function renderPage(number) {
-        pageIsRendering = true;
-        pdfDoc.getPage(number).then((page) => {
-            const viewport = page.getViewport({ scale });
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
+  // 3. Elements
+  const canvas = document.getElementById("pdf-canvas");
+  const ctx = canvas.getContext("2d");
+  const container = document.getElementById("pdf-viewer-container");
 
-            page.render({
-                canvasContext: ctx,
-                viewport: viewport,
-            }).promise.then(() => {
-                pageIsRendering = false;
-                if (pendingPage !== null) {
-                    renderPage(pendingPage);
-                    pendingPage = null;
-                }
-            });
+  // Create a stable reference for the loading message
+  const loadingMessage = document.createElement("p");
+  loadingMessage.className = "text-center text-secondary p-4";
+  loadingMessage.textContent = "Loading PDF...";
+  container.appendChild(loadingMessage);
 
-            document.getElementById("page-num").textContent = number;
-        });
-    }
+  /**
+   * Render the specific page
+   */
+  function renderPage(number) {
+    pageIsRendering = true;
 
-    function queueRenderPage(number) {
-        if (pageIsRendering) {
-            pendingPage = number;
-        } else {
-            renderPage(number);
+    pdfDoc
+      .getPage(number)
+      .then((page) => {
+        const viewport = page.getViewport({ scale });
+
+        // Dynamic sizing: adjust canvas to container width but maintain aspect ratio
+        const containerWidth = container.clientWidth - 40;
+        canvas.width = Math.min(viewport.width, containerWidth);
+        canvas.height = viewport.height * (canvas.width / viewport.width);
+
+        const renderContext = {
+          canvasContext: ctx,
+          viewport: page.getViewport({
+            scale: canvas.width / page.getViewport({ scale: 1.0 }).width,
+          }),
+        };
+
+        return page.render(renderContext).promise;
+      })
+      .then(() => {
+        pageIsRendering = false;
+        if (pendingPage !== null) {
+          renderPage(pendingPage);
+          pendingPage = null;
         }
+        document.getElementById("page-num").textContent = number;
+      })
+      .catch((error) => {
+        console.error("Render error:", error);
+      });
+  }
+
+  /**
+   * Handle page switching
+   */
+  function queueRenderPage(number) {
+    if (pageIsRendering) {
+      pendingPage = number;
+    } else {
+      renderPage(number);
     }
+  }
 
-    document.getElementById("prev-page").addEventListener("click", () => {
-        if (pageNum <= 1) return;
-        pageNum -= 1;
-        queueRenderPage(pageNum);
-    });
+  // 4. Event Listeners for Buttons
+  document.getElementById("prev-page").addEventListener("click", () => {
+    if (!pdfDoc || pageNum <= 1) return;
+    pageNum--;
+    queueRenderPage(pageNum);
+  });
 
-    document.getElementById("next-page").addEventListener("click", () => {
-        if (pageNum >= pdfDoc.numPages) return;
-        pageNum += 1;
-        queueRenderPage(pageNum);
-    });
+  document.getElementById("next-page").addEventListener("click", () => {
+    if (!pdfDoc || pageNum >= pdfDoc.numPages) return;
+    pageNum++;
+    queueRenderPage(pageNum);
+  });
 
-    pdfjsLib.getDocument(url).promise.then((documentRef) => {
+  // 5. Load the Document
+  if (!url) {
+    loadingMessage.textContent = "Please sign in.";
+  } else {
+    console.log("Fetching PDF data via Blob...");
+
+    // 1. Manually fetch the data to prevent the browser from downloading it
+    fetch(url)
+      .then((response) => {
+        if (!response.ok)
+          throw new Error("HTTP error! status: " + response.status);
+        return response.arrayBuffer(); // Get the raw binary data
+      })
+      .then((data) => {
+        // 2. Hand the raw binary data to PDF.js
+        const loadingTask = pdfjsLib.getDocument({
+          data: data, // Pass the data directly, not the URL
+          disableRange: true,
+          disableStream: true,
+        });
+
+        return loadingTask.promise;
+      })
+      .then((documentRef) => {
+        console.log("PDF success");
         pdfDoc = documentRef;
         document.getElementById("page-count").textContent = pdfDoc.numPages;
+        loadingMessage.style.display = "none";
         renderPage(pageNum);
-    });
+      })
+      .catch((error) => {
+        console.error("Final Error:", error);
+        loadingMessage.className = "text-center text-danger p-4";
+        loadingMessage.textContent = "Viewer Error: " + error.message;
+      });
+  }
 </script>
 {% endblock %}

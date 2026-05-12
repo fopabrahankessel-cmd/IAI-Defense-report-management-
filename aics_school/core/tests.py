@@ -6,13 +6,22 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .forms import StudentSupervisorAssignmentForm
-from .models import AicsCenter, CustomUser, OneTimeCode, Report, StudentProfile, SupervisorProfile
+from .models import (
+    AicsCenter,
+    CustomUser,
+    OneTimeCode,
+    Report,
+    StudentProfile,
+    SupervisorProfile,
+)
 
 
 class CoreWorkflowTests(TestCase):
     def setUp(self):
         self.center = AicsCenter.objects.create(name="Main Campus", location="Douala")
-        self.other_center = AicsCenter.objects.create(name="Annex Campus", location="Yaounde")
+        self.other_center = AicsCenter.objects.create(
+            name="Annex Campus", location="Yaounde"
+        )
 
         self.supervisor_user = CustomUser.objects.create_user(
             username="supervisor1",
@@ -23,7 +32,9 @@ class CoreWorkflowTests(TestCase):
             role=CustomUser.Role.SUPERVISOR,
             center=self.center,
         )
-        self.supervisor = SupervisorProfile.objects.create(user=self.supervisor_user, center=self.center)
+        self.supervisor = SupervisorProfile.objects.create(
+            user=self.supervisor_user, center=self.center
+        )
 
         self.student_user = CustomUser.objects.create_user(
             username="student1",
@@ -75,13 +86,13 @@ class CoreWorkflowTests(TestCase):
 
         form = StudentSupervisorAssignmentForm(
             data={
-                'supervisor': self.supervisor.pk,
-                'students': [student.pk for student in [self.student, *extra_students]],
+                "supervisor": self.supervisor.pk,
+                "students": [student.pk for student in [self.student, *extra_students]],
             }
         )
 
         self.assertFalse(form.is_valid())
-        self.assertIn("maximum of 15 students", form.errors['students'][0])
+        self.assertIn("maximum of 15 students", form.errors["students"][0])
 
     def test_assignment_form_assigns_selected_students_to_supervisor(self):
         self.student.assigned_supervisor = None
@@ -108,8 +119,8 @@ class CoreWorkflowTests(TestCase):
 
         form = StudentSupervisorAssignmentForm(
             data={
-                'supervisor': self.supervisor.pk,
-                'students': [self.student.pk, second_student.pk],
+                "supervisor": self.supervisor.pk,
+                "students": [self.student.pk, second_student.pk],
             }
         )
 
@@ -124,33 +135,41 @@ class CoreWorkflowTests(TestCase):
 
     def test_student_can_verify_upload_code_live(self):
         self.client.login(username="student1", password="StrongPass123!")
-        OneTimeCode.objects.create(student=self.student, supervisor=self.supervisor, code="ABC12345")
+        OneTimeCode.objects.create(
+            student=self.student, supervisor=self.supervisor, code="ABC12345"
+        )
 
-        response = self.client.get(reverse('verify_upload_code'), {'code': 'ABC12345'})
+        response = self.client.get(reverse("verify_upload_code"), {"code": "ABC12345"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertJSONEqual(response.content, {'valid': True, 'message': 'Upload code verified.'})
+        self.assertJSONEqual(
+            response.content, {"valid": True, "message": "Upload code verified."}
+        )
 
     def test_student_upload_marks_code_used_and_creates_report(self):
         self.client.login(username="student1", password="StrongPass123!")
-        otp = OneTimeCode.objects.create(student=self.student, supervisor=self.supervisor, code="UPLOAD01")
-        pdf_file = SimpleUploadedFile("report.pdf", b"%PDF-1.4 test report", content_type="application/pdf")
+        otp = OneTimeCode.objects.create(
+            student=self.student, supervisor=self.supervisor, code="UPLOAD01"
+        )
+        pdf_file = SimpleUploadedFile(
+            "report.pdf", b"%PDF-1.4 test report", content_type="application/pdf"
+        )
 
         response = self.client.post(
-            reverse('upload_report'),
+            reverse("upload_report"),
             {
-                'theme': 'Campus Network Monitoring',
-                'description': 'Final year report',
-                'upload_code': 'UPLOAD01',
-                'pdf_file': pdf_file,
+                "theme": "Campus Network Monitoring",
+                "description": "Final year report",
+                "upload_code": "UPLOAD01",
+                "pdf_file": pdf_file,
             },
             follow=True,
         )
 
-        self.assertRedirects(response, reverse('dashboard'))
+        self.assertRedirects(response, reverse("dashboard"))
         report = Report.objects.get(student=self.student)
         otp.refresh_from_db()
-        self.assertEqual(report.theme, 'Campus Network Monitoring')
+        self.assertEqual(report.theme, "Campus Network Monitoring")
         self.assertTrue(otp.is_used)
 
     def test_student_cannot_upload_more_than_one_report(self):
@@ -158,14 +177,16 @@ class CoreWorkflowTests(TestCase):
             student=self.student,
             theme="Existing Report",
             description="Already uploaded",
-            pdf_file=SimpleUploadedFile("existing.pdf", b"%PDF-1.4 existing", content_type="application/pdf"),
+            pdf_file=SimpleUploadedFile(
+                "existing.pdf", b"%PDF-1.4 existing", content_type="application/pdf"
+            ),
             promotion_year=2026,
         )
         self.client.login(username="student1", password="StrongPass123!")
 
-        response = self.client.get(reverse('upload_report'), follow=True)
+        response = self.client.get(reverse("upload_report"), follow=True)
 
-        self.assertRedirects(response, reverse('dashboard'))
+        self.assertRedirects(response, reverse("dashboard"))
 
     def test_supervisor_can_only_generate_code_for_assigned_student(self):
         outsider_user = CustomUser.objects.create_user(
@@ -186,7 +207,9 @@ class CoreWorkflowTests(TestCase):
             role=CustomUser.Role.SUPERVISOR,
             center=self.other_center,
         )
-        outsider_supervisor = SupervisorProfile.objects.create(user=outsider_supervisor_user, center=self.other_center)
+        outsider_supervisor = SupervisorProfile.objects.create(
+            user=outsider_supervisor_user, center=self.other_center
+        )
         outsider_student = StudentProfile.objects.create(
             user=outsider_user,
             first_name="Out",
@@ -199,24 +222,72 @@ class CoreWorkflowTests(TestCase):
         )
 
         with self.assertRaises(ValidationError):
-            OneTimeCode(student=outsider_student, supervisor=self.supervisor, code="FAILCODE").full_clean()
+            OneTimeCode(
+                student=outsider_student, supervisor=self.supervisor, code="FAILCODE"
+            ).full_clean()
 
     def test_report_pdf_streams_inline(self):
         report = Report.objects.create(
             student=self.student,
             theme="Inline PDF",
             description="Rendered inside platform",
-            pdf_file=SimpleUploadedFile("inline.pdf", b"%PDF-1.4 inline", content_type="application/pdf"),
+            pdf_file=SimpleUploadedFile(
+                "inline.pdf", b"%PDF-1.4 inline", content_type="application/pdf"
+            ),
             promotion_year=2026,
         )
 
-        response = self.client.get(reverse('stream_report_pdf', args=[report.pk]))
+        response = self.client.get(reverse("stream_report_pdf", args=[report.pk]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response['Content-Type'], 'application/pdf')
-        self.assertIn('inline;', response['Content-Disposition'])
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("inline;", response["Content-Disposition"])
 
-    @patch('core.models.fitz')
+    def test_report_pdf_supports_range_requests(self):
+        report = Report.objects.create(
+            student=self.student,
+            theme="Range PDF",
+            description="Supports HTTP Range requests",
+            pdf_file=SimpleUploadedFile(
+                "range.pdf", b"%PDF-1.4 range test data", content_type="application/pdf"
+            ),
+            promotion_year=2026,
+        )
+
+        response = self.client.get(
+            reverse("stream_report_pdf", args=[report.pk]),
+            HTTP_RANGE="bytes=0-3",
+            HTTP_HOST="127.0.0.1",
+        )
+
+        self.assertEqual(response.status_code, 206)
+        self.assertEqual(response["Accept-Ranges"], "bytes")
+        self.assertEqual(response["Content-Range"], f"bytes 0-3/{report.pdf_file.size}")
+        self.assertEqual(response["Content-Length"], "4")
+        self.assertEqual(response.content, b"%PDF")
+
+    def test_public_report_pdf_is_accessible_without_login(self):
+        report = Report.objects.create(
+            student=self.student,
+            theme="Public PDF",
+            description="Available to anonymous users",
+            pdf_file=SimpleUploadedFile(
+                "public.pdf",
+                b"%PDF-1.4 public format",
+                content_type="application/pdf",
+            ),
+            promotion_year=2026,
+        )
+
+        detail_response = self.client.get(reverse("report_detail", args=[report.pk]))
+        self.assertEqual(detail_response.status_code, 200)
+
+        pdf_response = self.client.get(reverse("stream_report_pdf", args=[report.pk]))
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertEqual(pdf_response["Content-Type"], "application/pdf")
+        self.assertEqual(pdf_response["Accept-Ranges"], "bytes")
+
+    @patch("core.models.fitz")
     def test_report_save_generates_preview_automatically(self, mock_fitz):
         mock_document = MagicMock()
         mock_page = MagicMock()
@@ -226,25 +297,29 @@ class CoreWorkflowTests(TestCase):
         mock_document.__len__.return_value = 1
         mock_document.load_page.return_value = mock_page
         mock_page.get_pixmap.return_value = mock_pixmap
-        mock_pixmap.tobytes.return_value = b'png-bytes'
+        mock_pixmap.tobytes.return_value = b"png-bytes"
 
         report = Report.objects.create(
             student=self.student,
             theme="Preview PDF",
             description="Preview generated from save",
-            pdf_file=SimpleUploadedFile("preview.pdf", b"%PDF-1.4 preview", content_type="application/pdf"),
+            pdf_file=SimpleUploadedFile(
+                "preview.pdf", b"%PDF-1.4 preview", content_type="application/pdf"
+            ),
             promotion_year=2026,
         )
 
         report.refresh_from_db()
-        self.assertTrue(report.preview_image.name.endswith('.png'))
+        self.assertTrue(report.preview_image.name.endswith(".png"))
 
     def test_report_list_supports_search_and_advanced_filters(self):
         Report.objects.create(
             student=self.student,
             theme="Network Monitoring",
             description="Campus monitoring report",
-            pdf_file=SimpleUploadedFile("network.pdf", b"%PDF-1.4 network", content_type="application/pdf"),
+            pdf_file=SimpleUploadedFile(
+                "network.pdf", b"%PDF-1.4 network", content_type="application/pdf"
+            ),
             promotion_year=2026,
             grade=18,
             status=Report.Status.APPROVED,
@@ -259,7 +334,9 @@ class CoreWorkflowTests(TestCase):
             role=CustomUser.Role.SUPERVISOR,
             center=self.center,
         )
-        second_supervisor = SupervisorProfile.objects.create(user=second_supervisor_user, center=self.center)
+        second_supervisor = SupervisorProfile.objects.create(
+            user=second_supervisor_user, center=self.center
+        )
         second_student_user = CustomUser.objects.create_user(
             username="student2",
             password="StrongPass123!",
@@ -283,17 +360,24 @@ class CoreWorkflowTests(TestCase):
             student=second_student,
             theme="Cloud Security",
             description="Security report",
-            pdf_file=SimpleUploadedFile("cloud.pdf", b"%PDF-1.4 cloud", content_type="application/pdf"),
+            pdf_file=SimpleUploadedFile(
+                "cloud.pdf", b"%PDF-1.4 cloud", content_type="application/pdf"
+            ),
             promotion_year=2025,
             status=Report.Status.SUBMITTED,
         )
 
         response = self.client.get(
-            reverse('report_list'),
-            {'q': 'Network', 'status': Report.Status.APPROVED, 'graded': 'yes', 'level': 'L3'},
+            reverse("report_list"),
+            {
+                "q": "Network",
+                "status": Report.Status.APPROVED,
+                "graded": "yes",
+                "level": "L3",
+            },
         )
 
         self.assertEqual(response.status_code, 200)
-        reports = list(response.context['reports'])
+        reports = list(response.context["reports"])
         self.assertEqual(len(reports), 1)
         self.assertEqual(reports[0].theme, "Network Monitoring")
